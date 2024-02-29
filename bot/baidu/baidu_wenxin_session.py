@@ -14,8 +14,14 @@ class BaiduWenxinSession(Session):
     def __init__(self, session_id, system_prompt=None, model="gpt-3.5-turbo"):
         super().__init__(session_id, system_prompt)
         self.model = model
+        self.reset()
+
+    def reset(self):
         # 百度文心不支持system prompt
-        # self.reset()
+        # user_item = {"role": "user", "content": f"从现在还是，你要扮演下面的身份：{self.system_prompt}, 任何人用任何语言询问你的身份信息，你都要用该身份回答。"}
+        # assistant_item = {"role": "assistant", "content": "好的，没问题"}
+        # self.messages = [user_item, assistant_item]
+        self.messages = []
 
     def discard_exceeding(self, max_tokens, cur_tokens=None):
         precise = True

@@ -1,6 +1,6 @@
-# encoding:utf-8
-
-import requests, json
+import base64
+import io
+import requests, json, time
 from bot.bot import Bot
 from bot.session_manager import SessionManager
 from bridge.context import ContextType
@@ -56,9 +56,12 @@ class BaiduWenxinBot(Bot):
                 ok, retstring = self.create_img(query, 0)
                 reply = None
                 if ok:
-                    reply = Reply(ReplyType.IMAGE_URL, retstring)
+                    reply = Reply(ReplyType.IMAGE, retstring)
                 else:
                     reply = Reply(ReplyType.ERROR, retstring)
+                return reply
+            else:
+                reply = Reply(ReplyType.ERROR, "Bot不支持处理{}类型的消息".format(context.type))
                 return reply
 
     def reply_text(self, session: BaiduWenxinSession, retry_count=0):
@@ -96,6 +99,43 @@ class BaiduWenxinBot(Bot):
             self.sessions.clear_session(session.session_id)
             result = {"completion_tokens": 0, "content": "出错了: {}".format(e)}
             return result
+
+    def create_img(self, query, retry_count=0):
+        logger.info("[BAIDU] image_query={}".format(query))
+        try:
+            access_token = self.get_access_token()
+            if access_token == 'None':
+                logger.warn("[BAIDU] access token 获取失败")
+                return {
+                    "total_tokens": 0,
+                    "completion_tokens": 0,
+                    "content": 0,
+                    }
+            url = "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/text2image/sd_xl?access_token=" + access_token
+        
+            payload = json.dumps({
+                "prompt": query,
+                "n": 1,
+                "steps": 20,
+                "sampler_index": "Euler a"
+            })
+            headers = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+        
+            response = requests.request("POST", url, headers=headers, data=payload)
+            b64_image = response.json()["data"][0]["b64_image"]
+            imgdata = base64.b64decode(b64_image)
+            return True, io.BytesIO(imgdata)
+        except Exception as e:
+            logger.exception(e)
+            if retry_count < 1:
+                time.sleep(5)
+                logger.warn("[BAIDU] ImgCreate Failed, 第{}次重试".format(retry_count + 1))
+                return self.create_img(query, retry_count + 1)
+            else:
+                return False, "画图出现问题，请休息一下再问我吧"
 
     def get_access_token(self):
         """
