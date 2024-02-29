@@ -26,7 +26,8 @@ import websocket
 import queue
 import threading
 import random
-
+import bot.xunfei.xunfei_text_to_img as xunfei_text_to_img
+import io
 # 消息队列 map
 queue_map = dict()
 
@@ -96,6 +97,14 @@ class XunFeiBot(Bot):
             reply = Reply(ReplyType.TEXT, reply_map[request_id])
             del reply_map[request_id]
             return reply
+        elif context.type == ContextType.IMAGE_CREATE:
+                ok, retstring = self.create_img(query, 0)
+                reply = None
+                if ok:
+                    reply = Reply(ReplyType.IMAGE, retstring)
+                else:
+                    reply = Reply(ReplyType.ERROR, retstring)
+                return reply
         else:
             reply = Reply(ReplyType.ERROR,
                           "Bot不支持处理{}类型的消息".format(context.type))
@@ -180,6 +189,29 @@ class XunFeiBot(Bot):
         }
         return data
 
+    def create_img(self, query, retry_count=0):
+        logger.info("[Xunfei] image_query={}".format(query))
+        try:
+            response = xunfei_text_to_img.create_image(query, self.app_id, self.api_key, self.api_secret)
+            data = json.loads(response)
+            # print("data" + str(message))
+            code = data['header']['code']
+            if code != 0:
+                return False, data['header']['message']
+            text = data["payload"]["choices"]["text"]
+            imageContent = text[0]
+            b64_image = imageContent["content"]
+            imageName = data['header']['sid']
+            imgdata = base64.b64decode(b64_image)
+            return True, io.BytesIO(imgdata)
+        except Exception as e:
+            logger.exception(e)
+            if retry_count < 1:
+                time.sleep(5)
+                logger.warn("[Xunfei] ImgCreate Failed, 第{}次重试".format(retry_count + 1))
+                return self.create_img(query, retry_count + 1)
+            else:
+                return False, "画图出现问题，请休息一下再问我吧"
 
 class ReplyItem:
     def __init__(self, reply, usage=None, is_end=False):
